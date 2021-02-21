@@ -292,57 +292,6 @@ class AlternatingDirectionMethod(ABC_Method):
 
         self.count+=1
 
-
-def absolute_error(analytical_decision, method_decision):
-    """
-    Принимает 2 сетки решений, возвращает число
-    """
-    return np.max(np.abs(analytical_decision - method_decision))
-
-def error_graphic(t_list, methods_errors_list, methods_labels = None , step =1, title = "", log_scale= False):
-    """
-    t_list: список с временными отметками
-    methods_errors: список списков с ошибками (по первой координате - методы, по второй - ошибки в соответствующий момент времени)
-            [[method1_err1, ...], [method2_err1, ...],... ]
-    step = 1 пропуск времени (если поставить  step =10  то выведется только каждый 10 результат)
-    """
-
-    m_labels = methods_labels or [f'method {i}' for i in range(len(methods_errors_list))]
-
-    fig, ax = plt.subplots()
-    
-    ax.set_title(title)
-    # ax.set_xlim()
-    # ax.set_ylim()
-    ax.set_xlabel("$t$")
-    ax.set_ylabel("absolute error")
-    if log_scale:
-        ax.set_yscale('log')
-    for i in range(len(methods_errors_list)):
-        ax.plot(t_list[::step], methods_errors_list[i][::step], label = m_labels[i])
-    ax.legend()
-    return fig
-
-def solution_graphic (xv, yv, results, res_lables = None, title = ''):
-    """
-    График решения. xv, yv - сетка (получили через meshgrid)
-    results - список результатов аналитической функции и методов
-    """
-    
-    labels = res_lables or [f'result {i}' for i in range(len(res_lables))]
-
-    fig, ax = plt.subplots()
-    
-    ax.set_title(title)
-    # ax.set_xlim()
-    # ax.set_ylim()
-    
-    for i in range(len(results)):
-        ax.plot_surface(xv,yv, results[i], label = labels[i])
-    ax.legend()
-    return fig
-
-
 class Double_strandedSymmetrizedAlgorithm(ABC_Method):
     """
     Явная разностная схема с однородными кравевыми условиями
@@ -391,81 +340,112 @@ class Double_strandedSymmetrizedAlgorithm(ABC_Method):
         self.count +=1
 
 
+def absolute_error(analytical_decision, method_decision):
+    """
+    Принимает 2 сетки решений, возвращает число
+    """
+    return np.max(np.abs(analytical_decision - method_decision))
+
+def error_graphic(t_list, methods_errors_list, methods_labels = None , step =1, title = "", log_scale= False):
+    """
+    t_list: список с временными отметками
+    methods_errors: список списков с ошибками (по первой координате - методы, по второй - ошибки в соответствующий момент времени)
+            [[method1_err1, ...], [method2_err1, ...],... ]
+    step = 1 пропуск времени (если поставить  step =10  то выведется только каждый 10 результат)
+    """
+
+    m_labels = methods_labels or [f'method {i+1}' for i in range(len(methods_errors_list))]
+
+    fig, ax = plt.subplots()
+    
+    ax.set_title(title)
+    # ax.set_xlim()
+    # ax.set_ylim()
+    ax.set_xlabel("$t$")
+    ax.set_ylabel("absolute error")
+    if log_scale:
+        ax.set_yscale('log')
+    for i in range(len(methods_errors_list)):
+        ax.plot(t_list[::step], methods_errors_list[i][::step], label = m_labels[i])
+    ax.legend()
+    return fig
+
+def solution_graphic (xv, yv, results, title = ''):
+    """
+    График решения. xv, yv - сетка (получили через meshgrid)
+    results - список результатов аналитической функции и методов
+    """
+    
+    
+    fig = plt.figure()
+    ax = fig.gca(projection='3d')
+    
+    ax.set_title(title)
+    # ax.set_xlim()
+    # ax.set_ylim()
+    
+    for i in range(len(results)):
+        ax.plot_surface(xv,yv, results[i])
+    return fig
+
+
+
+
+
 
 if __name__ == "__main__":
-    # x = np.linspace(1,2,4)
-    # x1 = np.array((0))
-    # y = np.linspace(2, 5, 5)
-
-
-    # print(x.shape, x1.shape, y.shape)
-
-    # xv,yv= np.meshgrid(x,y)
-    # print(xv.shape, yv.shape)
-
-    # x1v, y1v = np.meshgrid(x1,y)
-    # print(x1v.shape, y1v.shape)
-
-    # r = np.hstack((xv,x1v))
-    # print(r.shape)
-    # print(r)
-
-    # r = np.hstack((x1v,xv))
-    # print(r.shape)
-    # print(r)
-
     x_lim = [0,1]
     y_lim = [0,1]
-    h= 0.1
+    h = 0.1
+
+    t_0 = 0
     tau = h**2/4
-    t_0= 0
+    t = t_0
+
+    steps = 1000
 
     params = {
-        'a':0.01
+        'a':1
     }
 
     cond= BoundaryConditions_first_type(x_lim,y_lim,t_0, analytical_solution_1, **params)
 
     x= np.arange(*x_lim, step =h)[1:]
-    y = np.arange(*y_lim, step =h)[1:]
+    y= np.arange(*y_lim, step =h)[1:]
+
     method1 = MethodExplicitDifferenceScheme(x,y,cond, h, tau, analytical_f_1, **params )
-    # method2 = Double_strandedSymmetrizedAlgorithm(x,y,cond, h, tau, analytical_f_1, **params)
     method2 = AlternatingDirectionMethod(x,y,cond, h, tau, analytical_f_1, **params)
+    method3 = Double_strandedSymmetrizedAlgorithm(x,y,cond, h, tau, analytical_f_1, **params)
+
 
     t_l = []
-    m_e_l = [[],[]]
+    m_e_l = [[],[],[]]
 
     xv, yv = np.meshgrid(x,y)
 
-    for i in range(100):
+    for i in range(steps):
         t_l.append(method1.t)
-        # t_l.append(method2.t)
+
         m_e_l[0].append(absolute_error(analytical_solution_1(xv,yv,method1.t, **params), method1()))
         m_e_l[1].append(absolute_error(analytical_solution_1(xv,yv,method2.t, **params), method2()))
+        m_e_l[2].append(absolute_error(analytical_solution_1(xv,yv,method2.t, **params), method3()))
 
 
         method1.update()
         method2.update()
-        print(i)
+        method3.update()
+        t += tau
 
-    print(m_e_l[0][:10])
-    error_graphic(t_l, m_e_l, title= "test")
-    
-    print(np.max(np.abs(method1() - analytical_solution_1(xv,yv,method1.t, **params))))
-    print(np.max(np.abs(method2() - analytical_solution_1(xv,yv,method2.t, **params))))
-    
-    fig = plt.figure()
-    ax = fig.gca(projection='3d')
+        print(f'step: {i+1} of {steps}')
 
-    surf = ax.plot_surface(xv,yv,analytical_solution_1(xv,yv,method1.t, **params))
-    surf2 = ax.plot_surface(xv,yv,method1())
-    # print(method.t)
+    
+
+    for i in range(len(m_e_l)):
+        print(f"Похибка методу {i+1}: {m_e_l[i][-1]}")
+    
+
+    error_graphic(t_l, m_e_l, title= "Абсолютна похибка")
+    error_graphic(t_l, m_e_l, title= "Абсолютна похибка log шкала", log_scale=True)
+
+    solution_graphic(xv,yv,[analytical_solution_1(xv,yv,t, **params)], title="Аналітичний розв'язок")
     plt.show()
-
-    # print(method.xy[-1])
-    # print(analytical_solution_1(x[-1], y[-1], method.t))
-
-    # print(cond.x_right_cond(y, t_0))
-    
-
-
