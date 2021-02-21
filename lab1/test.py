@@ -164,25 +164,30 @@ class BoundaryConditions_first_type(ABC_BoundaryСonditions_first_type):
     """
     Кравевые условия первого рода считаются для 1 варианта
     """
-    def __init__(self,x_lim, y_lim, t_0):
+    def __init__(self,x_lim, y_lim, t_0, analytical_solution, **params):
         self.x_lim = x_lim # [x_min, x_max]
         self.y_lim = y_lim
         self.t_0 = t_0
+        # функция аналитического решения
+        self._analytical_solution = analytical_solution
+        # параметры для аналитического решения
+        self._params = params
+
     def x_left_cond(self, y, t):
         _x = np.ones(y.shape)* self.x_lim[0]
-        return analytical_solution_1(_x,y,t)
+        return self._analytical_solution(_x,y,t,**self._params)
     def x_right_cond(self, y, t):
         _x = np.ones(y.shape)* self.x_lim[1]
-        return analytical_solution_1(_x,y,t)
+        return self._analytical_solution(_x,y,t,**self._params)
     def y_left_cond(self, x, t):
         _y = np.ones(x.shape)* self.y_lim[0]
-        return analytical_solution_1(x,_y,t)
+        return self._analytical_solution(x,_y,t,**self._params)
     def y_right_cond(self, x, t):
         _y = np.ones(x.shape)* self.y_lim[1]
-        return analytical_solution_1(x,_y,t)
+        return self._analytical_solution(x,_y,t,**self._params)
     def time_cond(self,x,y):
         xv, yv = np.meshgrid(x,y)
-        return analytical_solution_1(xv,yv,self.t_0)
+        return self._analytical_solution(xv,yv,self.t_0, **self._params)
 
 
 
@@ -244,7 +249,7 @@ class AlternatingDirectionMethod(ABC_Method):
 
         new_xy = []
         ## Правая часть для метода прогонки
-        F = self.tau/2 * (-1*self._a*self._y_2derivative() - self.right_part(self._xv, self._yv, self.t+ self.tau/2)) - self.xy
+        F = self.tau/2 * (-1*self._a*self._y_2derivative() - self.right_part(self._xv, self._yv, self.t+ self.tau/2, **self._params)) - self.xy
         F[:,0] = F[:,0] - self._a*self.tau/(2* self.h**2)* self.bound_cond.x_left_cond(self.y, self.t+ self.tau/2)
         F[:,-1] = F[:,-1] - self._a*self.tau/(2* self.h**2)* self.bound_cond.x_right_cond(self.y, self.t+ self.tau/2)
 
@@ -263,7 +268,7 @@ class AlternatingDirectionMethod(ABC_Method):
         """
         new_xy = []
         ## Правая часть для метода прогонки
-        F = self.tau/2 * (-1*self._a*self._x_2derivative() - self.right_part(self._xv, self._yv, self.t)) - self.xy
+        F = self.tau/2 * (-1*self._a*self._x_2derivative() - self.right_part(self._xv, self._yv, self.t, self._params)) - self.xy
         F[0] = F[0] - self._a*self.tau/(2* self.h**2)* self.bound_cond.y_left_cond(self.x, self.t+ self.tau/2)
         F[-1] = F[-1] - self._a*self.tau/(2* self.h**2)* self.bound_cond.y_right_cond(self.y, self.t+ self.tau/2)
 
@@ -311,6 +316,54 @@ def error_graphic(t_list, methods_errors_list, step =1, title = ""):
     return fig
 
 
+class Double_strandedSymmetrizedAlgorithm(ABC_Method):
+    """
+    Явная разностная схема с однородными кравевыми условиями
+    """
+    ## init определен в родителе
+
+    def __call__(self):
+        return self.xy
+
+    
+    def update(self):
+        a = self._params.get('a') or 1
+        # обновление по явной схеме (это должно происходить только на парных точках, но обновить все проще)
+        explisit_xy = self.tau*( self.right_part(self._xv,self._yv, self.t, **self._params) + a*self._x_2derivative() + a*self._y_2derivative()) + self.xy
+
+
+
+        ## Вычисляем части производных для неявного шага метода
+        #Сдвинутая влево сетка (v_k-1_m) (кравевое условие у меньшей границы)
+        xv_l = np.hstack((self.bound_cond.x_left_cond(self.y,self.t+self.tau).reshape(-1,1),explisit_xy))[:,:-1]
+        
+        # Сдвинутая вправо сетка (v_k+1_m) (кравевое условие у большей границы)
+        xv_r = np.hstack([explisit_xy, self.bound_cond.x_right_cond(self.y, self.t+self.tau).reshape(-1,1)])[:,1:]
+
+        # Сдвинутая вниз сетка (v_k_m-1) (кравевое условие у меньшей границы)
+        yv_l = np.vstack([self.bound_cond.y_left_cond(self.x,self.t+self.tau).reshape(1,-1), explisit_xy])[:-1,:]
+        # Сдвинутая вверх сетка (v_k_m+1) (кравевое условие у большей границы)
+        yv_r = np.vstack([explisit_xy, self.bound_cond.y_right_cond(self.x, self.t+self.tau).reshape(1,-1)])[1:,:]
+
+        # Обовление по неявной схеме
+        non_explisit_xy = ( self.right_part(self._xv, self._yv, self.t+self.tau, **self._params) + self.xy/self.tau + a*(xv_l + xv_r)/self.h**2 + a*(yv_l + yv_r)/self.h**2 ) *\
+                            self.tau * self.h**2 / (self.h**2 + 4*a*self.tau)
+
+        
+        # совмещение(отбор четных и нечетных элементов) явного и неявного обновления
+        for i in range(self.xy.shape[0]):
+            for j in range(self.xy.shape[1]):
+                if i+j+self.count % 2 ==0:
+                    self.xy[i,j] = explisit_xy[i,j]
+                else:
+                    self.xy[i,j] = non_explisit_xy[i,j]
+
+
+
+        self.t += self.tau
+        self.count +=1
+
+
 
 if __name__ == "__main__":
     # x = np.linspace(1,2,4)
@@ -336,23 +389,27 @@ if __name__ == "__main__":
 
     x_lim = [0,1]
     y_lim = [0,1]
-    h= 0.01
+    h= 0.1
     tau = h**2/4
     t_0= 0
 
-    cond= BoundaryConditions_first_type(x_lim,y_lim,t_0)
+    params = {
+        'a':1
+    }
+
+    cond= BoundaryConditions_first_type(x_lim,y_lim,t_0, analytical_solution_1)
 
     x= np.arange(*x_lim, step =h)[1:]
     y = np.arange(*y_lim, step =h)[1:]
-    method1 = MethodExplicitDifferenceScheme(x,y,cond, h, tau, analytical_f_1)
-    method2 = AlternatingDirectionMethod(x,y,cond, h, tau, analytical_f_1)
+    method1 = MethodExplicitDifferenceScheme(x,y,cond, h, tau, analytical_f_1 )
+    method2 = Double_strandedSymmetrizedAlgorithm(x,y,cond, h, tau, analytical_f_1)
 
     t_l = []
     m_e_l = [[],[]]
 
     xv, yv = np.meshgrid(x,y)
 
-    for i in range(10000):
+    for i in range(10):
         t_l.append(method1.t)
         # t_l.append(method2.t)
         m_e_l[0].append(absolute_error(analytical_solution_1(xv,yv,method1.t), method1()))
