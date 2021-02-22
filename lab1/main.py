@@ -17,8 +17,9 @@ def analytical_solution_1(x,y,t, **params):
     A = params.get("A") or 1
     k1 = params.get("k1") or 1
     k2 = params.get("k2") or 1
+    
     return A*np.exp(k1*x + k2*y + (k1**2 + k2**2)*a*t)
-
+    
 def analytical_f_1(x,y,t,**params):
     """
     Аналитически вычисленная правая часть по аналитическому решению
@@ -28,6 +29,38 @@ def analytical_f_1(x,y,t,**params):
     A = params.get("A") or 1
     k1 = params.get("k1") or 1
     k2 = params.get("k2") or 1
+    return np.zeros(x.shape)
+
+
+def analytical_solution_2(x,y,t, **params):
+    """
+    Это аналитаческое решение (w) для вар 1
+    в функцию по своему желанию можно передавать именованные параметры 
+    a="value",
+    A="value",
+    k1="value",
+    k2="value",...
+    если ничего не передано,то идет значения по умолчанию: все равны 1
+    """
+    a = params.get("a") or 1
+    A = params.get("A") or 1
+    k1 = params.get("k1") or 1
+    k2 = params.get("k2") or 1
+    c1 = params.get("c1") or 1
+    c2 = params.get("c2") or 1
+    return A*np.cos(k1*x + c1)*np.cos(k2*y + c2)*np.exp(-(k1**2 + k2**2)*a*t)
+    
+def analytical_f_2(x,y,t,**params):
+    """
+    Аналитически вычисленная правая часть по аналитическому решению
+    В случае вар. 1 это просто 0
+    """
+    a = params.get("a") or 1
+    A = params.get("A") or 1
+    k1 = params.get("k1") or 1
+    k2 = params.get("k2") or 1
+    c1 = params.get("c1") or 1
+    c2 = params.get("c2") or 1
     return np.zeros(x.shape)
 
 
@@ -329,7 +362,7 @@ class Double_strandedSymmetrizedAlgorithm(ABC_Method):
         # совмещение(отбор четных и нечетных элементов) явного и неявного обновления
         for i in range(self.xy.shape[0]):
             for j in range(self.xy.shape[1]):
-                if i+j+self.count % 2 ==0:
+                if (i+j+self.count) % 2 ==0:
                     self.xy[i,j] = explisit_xy[i,j]
                 else:
                     self.xy[i,j] = non_explisit_xy[i,j]
@@ -400,12 +433,16 @@ if __name__ == "__main__":
 
     t_0 = 0
     tau = h**2/4
+    # tau = 0.05
     t = t_0
 
-    steps = 1000
+    steps = 100
 
     params = {
-        'a':1
+        'a':0.1,
+        'A': 1,
+        'k1':1,
+        'k2':1,
     }
 
     cond= BoundaryConditions_first_type(x_lim,y_lim,t_0, analytical_solution_1, **params)
