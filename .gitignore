@@ -1,2 +1,13 @@
 *.ipynb_checkpoints
 *.vscode
+*.aux
+*.dvi
+*.log
+*.gz
+*.gif
+*.out
+*.log
+*.pyo
+*.pyc
+*__pycache__/
+*.toc
