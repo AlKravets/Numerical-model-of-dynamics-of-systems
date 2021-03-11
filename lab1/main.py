@@ -454,35 +454,38 @@ if __name__ == "__main__":
     method2 = AlternatingDirectionMethod(x,y,cond, h, tau, analytical_f_1, **params)
     method3 = Double_strandedSymmetrizedAlgorithm(x,y,cond, h, tau, analytical_f_1, **params)
 
+    # список методов, которые для которых будет вычислена ошибка
+    method_list = [method1,method2, method3]
 
-    t_l = []
-    m_e_l = [[],[],[]]
+    # список временных отметок
+    time_list = []
 
+    # список списков, в котором хранятся ошибки методов
+    methods_error_list = []
+    for _ in method_list:
+        methods_error_list.append([])
+    
     xv, yv = np.meshgrid(x,y)
 
     for i in range(steps):
-        t_l.append(method1.t)
+        time_list.append(t)
 
-        m_e_l[0].append(absolute_error(analytical_solution_1(xv,yv,method1.t, **params), method1()))
-        m_e_l[1].append(absolute_error(analytical_solution_1(xv,yv,method2.t, **params), method2()))
-        m_e_l[2].append(absolute_error(analytical_solution_1(xv,yv,method2.t, **params), method3()))
+        for index, method in enumerate(method_list):
+            methods_error_list[index].append(absolute_error(analytical_solution_1(xv,yv,method.t, **params), method()))
+            method.update()
 
-
-        method1.update()
-        method2.update()
-        method3.update()
         t += tau
 
         print(f'step: {i+1} of {steps}')
 
     
 
-    for i in range(len(m_e_l)):
-        print(f"Похибка методу {i+1}: {m_e_l[i][-1]}")
+    for i in range(len(methods_error_list)):
+        print(f"Похибка методу {i+1}: {methods_error_list[i][-1]}")
     
 
-    error_graphic(t_l, m_e_l, title= "Абсолютна похибка")
-    error_graphic(t_l, m_e_l, title= "Абсолютна похибка log шкала", log_scale=True)
+    error_graphic(time_list, methods_error_list, title= "Абсолютна похибка")
+    error_graphic(time_list, methods_error_list, title= "Абсолютна похибка log шкала", log_scale=True)
 
     solution_graphic(xv,yv,[analytical_solution_1(xv,yv,t, **params)], title="Аналітичний розв'язок")
     plt.show()
