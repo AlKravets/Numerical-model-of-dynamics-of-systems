@@ -159,6 +159,15 @@ class ImplicitDifferenceScheme_Lite(ABC_Method):
 
 
 class ImplicitDifferenceScheme(ABC_Method):
+    """
+    Неявная разностная схема.
+    """
+    
+    def __init__(self,*args,newton_lite = False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._newton_lite = newton_lite
+
+
 
     def __call__(self):
         return self.xgrid
@@ -179,10 +188,18 @@ class ImplicitDifferenceScheme(ABC_Method):
         st_l = self.__u_left_right(start, self.t+self.tau, direction='l')
         st_r = self.__u_left_right(start, self.t+self.tau, direction='r')
 
-        for i in range(steps):
-            start = start - self.__jacobian_newton(start, st_l, st_r) @ self.__func_newton(start, st_l, st_r)
-            st_l = self.__u_left_right(start, self.t+self.tau, direction='l')
-            st_r = self.__u_left_right(start, self.t+self.tau, direction='r')
+        if not self._newton_lite:
+            for i in range(steps):
+                start = start - self.__jacobian_newton(start, st_l, st_r) @ self.__func_newton(start, st_l, st_r)
+                st_l = self.__u_left_right(start, self.t+self.tau, direction='l')
+                st_r = self.__u_left_right(start, self.t+self.tau, direction='r')
+        else:
+            print('!')
+            Jacob_0 = self.__jacobian_newton(start, st_l, st_r)
+            for i in range(steps):
+                start = start - Jacob_0 @ self.__func_newton(start, st_l, st_r)
+                st_l = self.__u_left_right(start, self.t+self.tau, direction='l')
+                st_r = self.__u_left_right(start, self.t+self.tau, direction='r')
         
         return start
 
@@ -210,10 +227,12 @@ class ImplicitDifferenceScheme(ABC_Method):
         self.count +=1
 
 class TwoStepFiniteDifferenseAlgorithm(ABC_Method):
-    
+    """
+    Двухшаговый симетризированный метод
+    """
     
     def __call__(self):
-        print(self.xgrid.shape)
+        # print(self.xgrid.shape)
         return self.xgrid
 
     def __u_left_right(self, u, t, direction = 'l'):
@@ -267,7 +286,7 @@ if __name__ == "__main__":
     x_lim = [0,101]
     h = 1
 
-    steps = 150
+    steps = 30
 
     t_0 =0
     # tau= h**2/4
@@ -278,7 +297,7 @@ if __name__ == "__main__":
 
     x= np.arange(*x_lim, step =h)[1:]
 
-    method = ImplicitDifferenceScheme(x,cond, h, tau)
+    method = ImplicitDifferenceScheme(x,cond, h, tau, newton_lite=False)
     # method = TwoStepFiniteDifferenseAlgorithm(x,cond, h, tau)
 
     for i in range(steps):
