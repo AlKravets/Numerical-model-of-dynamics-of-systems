@@ -359,7 +359,7 @@ def anim_plots(x_lim,h, t_0, tau, step, y_lim = (-0.5, 3.5), name = 'res_animati
     шаг по времени tau
     Количество шагов step это также количество кадров анимации
     nsize регулирует размер графика
-    delimiter, decimal_places отвечают за параметры таблицы ошибок
+    decimal_places количество знаков, что выводятся, для времени
     **params - это словарь константами для функций.
     plots_names список что содержит подписи для [
         аналитического решения,
@@ -442,4 +442,4 @@ if __name__ == "__main__":
 
     step = 160
 
-    # anim_plots(x_lim, h, t_0, tau, step, **params, figsize=(15,10), y_lim=(0,3.5), name= 'gif/res_animation.gif')
+    anim_plots(x_lim, h, t_0, tau, step, **params, figsize=(10,6), y_lim=(0,3.5), name= 'gif/res_animation.gif')
