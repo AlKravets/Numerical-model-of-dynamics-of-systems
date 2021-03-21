@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
 
 
 def analytical_solution(x,t, **params):
@@ -226,7 +228,7 @@ class ImplicitDifferenceScheme(ABC_Method):
         self.t+=self.tau
         self.count +=1
 
-class TwoStepFiniteDifferenseAlgorithm(ABC_Method):
+class TwoStepFiniteDifferenceAlgorithm(ABC_Method):
     """
     Двухшаговый симетризированный метод
     """
@@ -272,9 +274,6 @@ class TwoStepFiniteDifferenseAlgorithm(ABC_Method):
         self.count+=1
 
 
-
-
-
 def absolute_error(analytical_decision, method_decision):
     """
     Принимает 2 сетки решений, возвращает число
@@ -282,35 +281,165 @@ def absolute_error(analytical_decision, method_decision):
     return np.max(np.abs(analytical_decision - method_decision))
 
 
+
+def main_plots_and_errors(x_lim, h, t_0, tau, steps_list, nsize = 1, delimiter = ' & ',decimal_places= 4,plots_names =None, **params):
+    """
+    Главная функция для создания отчета
+    принимает ограничения по x x_lim
+    шаг по иксу h
+    начальное время t_0
+    шаг по времени tau
+    список с числами шагов, на которых нужно вывести график
+    nsize регулирует размер графика
+    delimiter, decimal_places отвечают за параметры таблицы ошибок
+    **params - это словарь константами для функций.
+    plots_names список что содержит подписи для [
+        аналитического решения,
+        метода ImplicitDifferenceScheme,
+        метода TwoStepFiniteDifferenceAlgorithm
+    ] 
+
+    Возвращает график с 2 колонками картинок, строки картинок регулируются количеством элементов step_list
+    Возвращает таблицу с количеством шагов и ошибками методов на этом количестве шагов.
+    """
+    
+    t = t_0
+    x= np.arange(*x_lim, step =h)[1:]
+
+    cond = BoundaryConditions_first_type(x_lim, t_0, analytical_solution,  **params)
+
+    method_im = ImplicitDifferenceScheme(x,cond, h, tau, **params)
+    method_two_step = TwoStepFiniteDifferenceAlgorithm(x,cond, h, tau, **params)
+
+    err_list = [[],[]]
+
+    steps_list.sort()
+    n = len(steps_list)
+
+    if plots_names is None:
+        plots_names = ['Analit. solution','Implicit scheme', 'Two steps sim. method']
+    fig, ax = plt.subplots(n//2 +n%2,2, figsize = (nsize*15, nsize*15 *(n//2+n%2)/2) )
+    ax = ax.ravel()
+
+    for i in range(steps_list[-1]):
+        print(f'step {i+1}')
+        method_im.update()
+        method_two_step.update()
+        t+=tau
+        if i+1 in steps_list:
+            j = steps_list.index(i+1)
+            ax[j].plot(x, analytical_solution(x,t, **params), label=plots_names[0])
+            ax[j].plot(x, method_im(), label = plots_names[1])
+            ax[j].plot(x, method_two_step(), label = plots_names[2])
+
+            ax[j].legend()
+            ax[j].set_title(f'steps: {method_im.count}, time: {round(method_im.t, decimal_places//2)}')
+
+            err_list[0].append(absolute_error(analytical_solution(x,t, **params), method_im()))
+            err_list[1].append(absolute_error(analytical_solution(x,t, **params), method_two_step()))
+    
+    for i in range(j+1, len(ax)):
+        ax[i].remove()
+
+    print('Error table')
+    print("N", delimiter, delimiter.join([str(item) for item in steps_list]))
+    for index, err in enumerate(err_list):
+        print(plots_names[index+1], delimiter, delimiter.join([str(round(item,decimal_places)) for item in err]), sep='')
+
+    plt.show()
+
+
+def anim_plots(x_lim,h, t_0, tau, step, y_lim = (-0.5, 3.5), name = 'res_animation.gif', figsize = None, decimal_places= 2,plots_names =None, **params):
+    """
+    функция для создания анимации
+    принимает ограничения по x x_lim
+    Также ВАЖНО указать верные ограничения на y y_lim (по умолчанию они настроены для тестовой анимации)
+    шаг по иксу h
+    начальное время t_0
+    шаг по времени tau
+    Количество шагов step это также количество кадров анимации
+    nsize регулирует размер графика
+    delimiter, decimal_places отвечают за параметры таблицы ошибок
+    **params - это словарь константами для функций.
+    plots_names список что содержит подписи для [
+        аналитического решения,
+        метода ImplicitDifferenceScheme,
+        метода TwoStepFiniteDifferenceAlgorithm
+    ] 
+
+    Возвращает график с 2 колонками картинок, строки картинок регулируются количеством элементов step_list
+    Возвращает таблицу с количеством шагов и ошибками методов на этом количестве шагов.
+    """
+    t = [t_0]
+    x= np.arange(*x_lim, step =h)[1:]
+
+    cond = BoundaryConditions_first_type(x_lim, t_0, analytical_solution,  **params)
+
+    method_im = ImplicitDifferenceScheme(x,cond, h, tau, **params)
+    method_two_step = TwoStepFiniteDifferenceAlgorithm(x,cond, h, tau, **params)
+
+    
+    methdos_list = [analytical_solution, method_im, method_two_step]
+    if plots_names is None:
+        plots_names = ['Analit. solution','Implicit scheme', 'Two steps sim. method']
+
+    fig = plt.figure(figsize=figsize)
+    ax = plt.axes(xlim = x_lim, ylim = y_lim)
+    
+    line_list = []
+    for i in range(3):
+        line, = ax.plot([],[], label = plots_names[i])
+        line_list.append(line)
+    
+    def init():
+        for index, line in enumerate(line_list):
+            if index ==0:
+                line.set_data(x, methdos_list[0](x, t[0], **params))
+            else:
+                line.set_data(x, methdos_list[index]())
+        return line_list
+
+    def animate(i):
+        t[0] +=tau
+        methdos_list[1].update()
+        methdos_list[2].update()
+        ax.set_title(f'steps: {method_im.count}, time: {round(method_im.t, decimal_places)}')
+        for index, line in enumerate(line_list):
+            if index ==0:
+                line.set_data(x, methdos_list[0](x,t[0],**params))
+            else:
+                line.set_data(x,methdos_list[index]())
+
+        return line_list
+    plt.legend(framealpha = 0.4,loc=3)
+
+    anim = animation.FuncAnimation(fig, animate, init_func=init,
+                               frames=step,interval=100, blit=True)
+    
+    anim.save(name)
+    # если выдает ошибки попробуйте
+    # anim.save(name, writer='pillow')
+
+
 if __name__ == "__main__":
     x_lim = [0,101]
     h = 1
 
-    steps = 30
-
     t_0 =0
-    # tau= h**2/4
     tau= 1/3
-    t = t_0
 
-    cond = BoundaryConditions_first_type(x_lim, t_0, analytical_solution)
+    params ={
+        'u_01': 3,
+        'u_02': 1,
+        'gamma': 1,
+        'beta': 1,
+    }
 
-    x= np.arange(*x_lim, step =h)[1:]
+    steps_list = [10,50,100,150]
+    plots_names = ['Analit. solution','Implicit scheme', 'Two steps sim. method']
 
-    method = ImplicitDifferenceScheme(x,cond, h, tau, newton_lite=False)
-    # method = TwoStepFiniteDifferenseAlgorithm(x,cond, h, tau)
+    main_plots_and_errors(x_lim, h, t_0, tau, steps_list, **params, plots_names= plots_names)
 
-    for i in range(steps):
-        method.update()
-        t+=tau
-        print(i)
-    err = absolute_error(analytical_solution(x,t), method())
+    step = 160
 
-    print('err:',err)
-
-
-    plt.plot(x, analytical_solution(x,t), label ='real')
-    plt.plot(x, method(), label = 'test')
-    plt.legend()
-
-    plt.show()
+    # anim_plots(x_lim, h, t_0, tau, step, **params, figsize=(15,10), y_lim=(0,3.5), name= 'gif/res_animation.gif')
