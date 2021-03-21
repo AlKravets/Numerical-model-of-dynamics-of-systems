@@ -168,7 +168,7 @@ u_i^{v+1}= u_i^{v} + \tau Lu_{i}^{v+1}
 Розпишемо рівняння (\ref{eq8}), підставляючи в нього (\ref{eq6}), для того, щоб явно вивести $u_i^{v+1}$
 
 \begin{equation} \label{eq9}
-	u^{v+1}_{i} = \frac{1 + \frac{\beta \tau}{2h} \left( u^{v+1}_{i+1} - u^{v+1}_{i-1} \right) + \frac{2 \gamma \tau}{h^2} }{u_i^v + \frac{\gamma \tau}{h^2} \left( u^{v+1}_{i+1} + u^{v+1}_{i-1} \right) }
+	u^{v+1}_{i} = \frac{u_i^v + \frac{\gamma \tau}{h^2} \left( u^{v+1}_{i+1} + u^{v+1}_{i-1} \right) }{1 + \frac{\beta \tau}{2h} \left( u^{v+1}_{i+1} - u^{v+1}_{i-1} \right) + \frac{2 \gamma \tau}{h^2} }
 \end{equation}
 
 Ця схема абсолютна стійка, та більш точна на парних часових кроках.
