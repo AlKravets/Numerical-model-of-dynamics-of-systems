@@ -263,6 +263,9 @@ class TwoStepFiniteDifferenceAlgorithm(ABC_Method):
         new_xg_implis = (self.xgrid+  self.tau * self.gamma /self.h**2 * (new_xg_explis_r+ new_xg_explis_l))/ \
             (1 + self.tau*self.beta / (2* self.h) *(new_xg_explis_r - new_xg_explis_l) + self.tau*self.gamma *2 / self.h**2)
         
+        # print(np.min((1 + self.tau*self.beta / (2* self.h) *(new_xg_explis_r - new_xg_explis_l) + self.tau*self.gamma *2 / self.h**2)))
+        # print((1 + self.tau*self.beta / (2* self.h) *(new_xg_explis_r - new_xg_explis_l) + self.tau*self.gamma *2 / self.h**2))
+        
         for i in range(self.xgrid.shape[0]):
             if (i+ self.count) % 2 == 0:
                 self.xgrid[i] = new_xg_explis[i]
@@ -427,7 +430,8 @@ if __name__ == "__main__":
 
     t_0 =0
     tau= 1/3
-
+    
+    # При увеличении разницы (u_01 - u_02) могут сломатся методы.
     params ={
         'u_01': 3,
         'u_02': 1,
@@ -435,11 +439,11 @@ if __name__ == "__main__":
         'beta': 1,
     }
 
-    steps_list = [10,50,100,150]
+    steps_list = [10,50, 100, 150]
     plots_names = ['Analit. solution','Implicit scheme', 'Two steps sim. method']
 
     main_plots_and_errors(x_lim, h, t_0, tau, steps_list, **params, plots_names= plots_names)
 
     step = 160
 
-    anim_plots(x_lim, h, t_0, tau, step, **params, figsize=(10,6), y_lim=(0,3.5), name= 'gif/res_animation.gif')
+    # anim_plots(x_lim, h, t_0, tau, step, **params, figsize=(10,6), y_lim=(0,3.5), name= 'gif/res_animation.gif')
