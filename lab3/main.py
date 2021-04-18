@@ -200,12 +200,15 @@ class Method:
         в Данном случае все краевые точки считаются из bound_cond
         w = 1.5 параметр релаксации 1 <= w <=2
         в params записаны переменные 
-        rho, d
+        rho, d, visc
         """
         self.x = x
         self.y = y
 
         self._params = params
+        self.rho = self._params.get('rho') or 1
+        self.visc = self._params.get('visc') or 1
+        
         self.w = w
 
         self.bound_cond = bound_cond
@@ -246,7 +249,7 @@ class Method:
         """
         return self.p
 
-    def __grid_left_right(self,type_is , direction, cond_axis):
+    def __grid_left_right(self, grid, type_is , direction, cond_axis, t = None):
         """
         type is = 'p' or 'v' or 'u'
         direction = 'r' or 'l' 
@@ -254,27 +257,30 @@ class Method:
         cond_axis = 'x' or 'y'
         """
 
-        if type_is =='v':
-            grid = self.v.copy()
-        elif type_is == 'u':
-            grid= self.u.copy()
-        else:
-            grid = self.p.copy()
+        # if type_is =='v':
+        #     grid = self.v.copy()
+        # elif type_is == 'u':
+        #     grid= self.u.copy()
+        # else:
+        #     grid = self.p.copy()
 
-        
+        if t is None:
+            t = self.t
+
         if cond_axis == 'x':
             if direction == 'l':
-                grid = np.hstack([self.bound_cond.cond(self.x,self.y, self.t,direction, type_is, cond_axis).reshape(-1.1),
+                grid = np.hstack([self.bound_cond.cond(self.x,self.y, t,direction, type_is, cond_axis).reshape(-1,1),
                     grid])[:,:-1]
             else:
-                grid = np.hstack([grid, self.bound_cond.cond(self.x,self.y, self.t,direction, type_is, cond_axis).reshape(-1.1)])[:,1:]
+                grid = np.hstack([grid, self.bound_cond.cond(self.x,self.y, t,direction, type_is, cond_axis).reshape(-1,1)])[:,1:]
         
         else:
             if direction == 'l':
-                grid = np.hstack([self.bound_cond.cond(self.x,self.y, self.t,direction, type_is, cond_axis).reshape(-1.1), grid])[:-1,:]
+                grid = np.vstack([self.bound_cond.cond(self.x,self.y, t,direction, type_is, cond_axis).reshape(1,-1), grid])[:-1,:]
             else:
-                grid = np.hstack([grid, self.bound_cond.cond(self.x,self.y, self.t,direction, type_is, cond_axis).reshape(-1.1)])[1:,:]
-
+                grid = np.vstack([grid, self.bound_cond.cond(self.x,self.y, t,direction, type_is, cond_axis).reshape(1,-1)])[1:,:]
+        print(grid)
+        print(grid.shape)
         return grid
 
     def __D_left_right(self, direction, cond_axis):
@@ -297,10 +303,10 @@ class Method:
         """
         D из описания лабораторной работы
         """
-        D = (self.__grid_left_right('u',direction= 'r', cond_axis= 'x') - 
-                self.__grid_left_right('u',direction= 'l', cond_axis= 'x'))/(2*self.hx)  + \
-            (self.__grid_left_right('v',direction='r',cond_axis= 'y') - 
-                self.__grid_left_right('v',direction='l',cond_axis='y'))/(2*self.hy)
+        D = (self.__grid_left_right(self.u,'u',direction= 'r', cond_axis= 'x') - 
+                self.__grid_left_right(self.u,'u',direction= 'l', cond_axis= 'x'))/(2*self.hx)  + \
+            (self.__grid_left_right(self.v,'v',direction='r',cond_axis= 'y') - 
+                self.__grid_left_right(self.v,'v',direction='l',cond_axis='y'))/(2*self.hy)
 
         return D
 
@@ -310,24 +316,171 @@ class Method:
         """
         S = self.__D()/self.tau
         
-        # тут вопросы
-        D = self.__D()
-        S = S + 1/self.__RE() * (self.__D_left_right( direction='r',cond_axis='x') - 2*D +  
-                                self.__D_left_right(direction='l', cond_axis='x'))/self.hx**2 + \
-                            (self.__D_left_right(direction='r',cond_axis='y') - 2*D +
-                            self.__D_left_right(direction='l', cond_axis= 'y'))/self.hy**2
+        # # тут вопросы
+        # D = self.__D()
+        # S = S + 1/self.__RE() * (self.__D_left_right( direction='r',cond_axis='x') - 2*D +  
+        #                         self.__D_left_right(direction='l', cond_axis='x'))/self.hx**2 + \
+        #                     (self.__D_left_right(direction='r',cond_axis='y') - 2*D +
+        #                     self.__D_left_right(direction='l', cond_axis= 'y'))/self.hy**2
 
         return S
 
-    
-    def update(self):
-        pass
+
+    def _update_u(self):
         
+        p_term  = self.tau/self.rho * (self.__grid_left_right(self.p, type_is= 'p', direction= 'r', cond_axis='x') - 
+                self.__grid_left_right(self.p, type_is='p', direction='l', cond_axis='x'))/self.hx
+
+        explicit_u = self.u  - p_term + self.visc *( (self.__grid_left_right(self.u,type_is='u',direction='r',cond_axis='x')- 2* self.u + 
+                        self.__grid_left_right(self.u,type_is='u',direction='l',cond_axis='x'))/self.hx**2 +
+                (self.__grid_left_right(self.u,type_is='u', direction='r',cond_axis='y') - 2*self.u +  
+                    self.__grid_left_right(self.u, type_is='u',direction='l',cond_axis='y'))/self.hy**2)
+
+        new_u_xr = self.__grid_left_right(explicit_u, type_is='u', direction='r', cond_axis='x', t = self.t+self.tau)
+        new_u_xl = self.__grid_left_right(explicit_u, type_is='u', direction='l', cond_axis='x', t = self.t+self.tau)
+        new_u_yr = self.__grid_left_right(explicit_u, type_is='u', direction='r', cond_axis='y', t = self.t+self.tau)
+        new_u_yl = self.__grid_left_right(explicit_u, type_is='u', direction='l', cond_axis='y', t = self.t+self.tau)
+
+        implicit_u = ( explicit_u - p_term + self.visc* ( (new_u_xr+new_u_xl)/self.hx**2 + (new_u_yl+new_u_yr)/self.hy**2))/\
+            (1+ 2*self.visc*(1/self.hx**2 + 1/self.hy**2))
+
+        for i in range(self.u.shape[0]):
+            for j in range(self.u.shape[1]):
+                if (i+j+self.count) % 2 ==0:
+                    self.u[i,j] = explicit_u[i,j]
+                else:
+                    self.u[i,j] = implicit_u[i,j]
+
+    def _update_v(self):
+    
+        p_term  = self.tau/self.rho * (self.__grid_left_right(self.p, type_is= 'p', direction= 'r', cond_axis='y') - 
+                self.__grid_left_right(self.p, type_is='p', direction='l', cond_axis='y'))/self.hy
+
+        new_v_xr = self.__grid_left_right(self.v,type_is='v',direction='r',cond_axis='x')
+        new_v_xl = self.__grid_left_right(self.v,type_is='v', direction= 'l', cond_axis='x')
+        new_v_yr = self.__grid_left_right(self.v,type_is='v', direction= 'r', cond_axis='y')
+        new_v_yl = self.__grid_left_right(self.v,type_is='v', direction= 'l', cond_axis='y')
+
+        explicit_v = self.v - p_term + self.visc * ( (new_v_xr - 2*self.v + new_v_xl)/self.hx**2 + (new_v_yr - 2*self.v + new_v_yl)/self.hy**2)
+
+        new_v_xr = self.__grid_left_right(explicit_v,type_is='v',direction='r',cond_axis='x', t = self.t+self.tau)
+        new_v_xl = self.__grid_left_right(explicit_v,type_is='v', direction= 'l', cond_axis='x', t = self.t+self.tau)
+        new_v_yr = self.__grid_left_right(explicit_v,type_is='v', direction= 'r', cond_axis='y', t = self.t+self.tau)
+        new_v_yl = self.__grid_left_right(explicit_v,type_is='v', direction= 'l', cond_axis='y', t = self.t+self.tau)
+
+
+        implicit_v = (explicit_v - p_term + self.visc *(  (new_v_xl + new_v_xr)/self.hx**2  + (new_v_yl + new_v_yr)/self.hy**2)) /\
+                    (1+ 2*self.visc*(1/self.hx**2 + 1/self.hy**2))
+
+        
+        for i in range(self.v.shape[0]):
+            for j in range(self.v.shape[1]):
+                if (i+j+self.count) % 2 ==0:
+                    self.v[i,j] = explicit_v[i,j]
+                else:
+                    self.v[i,j] = implicit_v[i,j]
+
+    def _update_p(self, steps= 10):
+        """
+        Метод верхней релаксации
+        """
+        p_now = self.p.copy()
+        
+        beta = self.hx/self.hy
+
+        S = self.__S()
+
+        left_zero_term  = self.w/(2*(1+ beta**2))*self.bound_cond.p_x_left_cond(self.y,self.t)
+
+        for _ in range(steps):
+            res = []
+            p_now_xr = self.__grid_left_right(p_now, type_is= 'p', direction='r',cond_axis= 'x')
+            p_now_yr = self.__grid_left_right(p_now, type_is= 'p', direction='r',cond_axis= 'y')
+
+            right_part = p_now + self.w / (2*(1+beta**2)) *(p_now_xr + beta**2 * p_now_yr - self.hx**2 * S - 2*(1 + beta**2)*p_now)
+
+            p_before = self.bound_cond.p_y_left_cond(self.x,self.t)
+            
+            for j in range(p_now.shape[0]):
+                A = np.eye(p_now.shape[1]) + np.diagflat(np.ones(p_now.shape[1]-1)*-1*(self.w / (2*(1+beta**2))), k = -1)
+                b = right_part[j] + beta**2 * self.w / (2*(1+beta**2)) * p_before
+                b[0] += left_zero_term[j]
+
+                p_before = np.linalg.solve(A,b)
+                res.append(p_before)
+            
+            p_now = np.array(res)
+
+        self.p =p_now
+                
+
+    def update(self):
+        
+        print(self.u.shape, self.v.shape, self.p.shape)
+
+        D = self.__D()
+        print(D.shape)
+        
+        self._update_p()
+        print(self.p.shape)
+
+        self._update_u()
+        print(self.u.shape)
+
+        self._update_v()
+        print(self.v.shape)
+      
+
+        self.t += self.tau
+        self.count +=1
 
 if __name__ == "__main__":
     x_lim = [0,1]
     y_lim = [0,1]
 
+
     hx = 0.1
     hy = 0.1
-    tau = 0.01
+
+    t_0 = 0
+    tau = 0.001
+
+
+    params = {
+        "d" : y_lim[1],
+        "rho": 1,
+        "visc": 1
+    }
+
+    cond = BoundaryConditions_first_type(x_lim,y_lim,t_0,analytical_u,analytical_v,analytical_p,**params)
+
+    x= np.arange(*x_lim, step =hx)[1:]
+    y= np.arange(*y_lim, step =hy)[1:]
+    xv, yv = np.meshgrid(x,y)
+    
+    m = Method(x,y,cond,hx,hy, tau, **params)
+
+
+    print(absolute_error(analytical_u(xv,yv,t_0),m.Get_u()))
+    print(absolute_error(analytical_v(xv,yv,t_0),m.Get_v()))
+    print(absolute_error(analytical_p(xv,yv,t_0),m.Get_p()))
+
+    for i in range(1):
+        m.update()
+        t = t_0+ tau
+
+
+    print(absolute_error(analytical_u(xv,yv,t),m.Get_u()))
+    
+    print(np.max(np.abs(analytical_u(xv,yv,t))))
+
+    print('________________________')
+
+    print(absolute_error(analytical_v(xv,yv,t),m.Get_v()))
+    print(np.max(np.abs(analytical_v(xv,yv,t))))
+
+
+    print('________________________')
+
+    print(absolute_error(analytical_p(xv,yv,t),m.Get_p()))
+    print(np.max(np.abs(analytical_p(xv,yv,t))))
