@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import matplotlib as mpl
 
 
 def analytical_u(x,y,t,**params):
@@ -236,19 +237,19 @@ class Method:
         """
         Возвращает сетку составляющей скорости по x в текущий момент
         """
-        return self.u
+        return self.u.copy()
 
     def Get_v(self):
         """
         Возвращает сетку составляющей скорости по y в текущий момент
         """
-        return self.v
+        return self.v.copy()
 
     def Get_p(self):
         """
         Возвращает сетку давления в текущий момент
         """
-        return self.p
+        return self.p.copy()
 
     def __grid_left_right(self, grid, type_is , direction, cond_axis, t = None):
         """
@@ -388,51 +389,10 @@ class Method:
                     self.v[i,j] = explicit_v[i,j]
                 else:
                     self.v[i,j] = implicit_v[i,j]
-
-    def _update_p(self, steps= 10):
-        """
-        Метод верхней релаксации
-        """
-        p_now = self.p.copy()
-    
-        
-        beta = self.hx/self.hy
-
-        _xi = ( ( np.cos(np.pi / (self.bound_cond.x_lim[1] -self.bound_cond.x_lim[0])/self.hx) + beta**2 *np.cos(np.pi / (self.bound_cond.y_lim[1] -self.bound_cond.y_lim[0])/self.hy)  )/(1 + beta**2))**2
-
-        self.w = 2* ( 1 - np.sqrt(1 - _xi))/_xi
-
-
-        div = 2*(1+ beta**2)
-        S = self.__S()
-
-        print('S max:', np.max(np.abs(S)))
-        left_zero_term  = self.w/div*self.bound_cond.p_x_left_cond(self.y,self.t)
-
-        for _ in range(steps):
-            res = []
-            p_now_xr = self.__grid_left_right(p_now, type_is= 'p', direction='r',cond_axis= 'x')
-            p_now_yr = self.__grid_left_right(p_now, type_is= 'p', direction='r',cond_axis= 'y')
-
-            right_part = p_now + self.w / div *(p_now_xr + beta**2 * p_now_yr - self.hx**2 * S - div*p_now)
-
-            p_before = self.bound_cond.p_y_left_cond(self.x,self.t)
-            
-            for j in range(p_now.shape[0]):
-                A = np.eye(p_now.shape[1]) + np.diagflat(np.ones(p_now.shape[1]-1)*-1*self.w / div , k = -1)
-                b = right_part[j] + beta**2 * self.w / div * p_before
-                b[0] += left_zero_term[j]
-
-                p_before = np.linalg.solve(A,b)
-                res.append(p_before)
-            
-            p_now = np.array(res)
-
-        self.p =p_now
         
 
-    def __update_p(self):
-        print('--------------')
+    def _update_p(self):
+        # print('--------------')
         new_p = self.p.copy()
 
         beta = self.hx/self.hy
@@ -441,19 +401,19 @@ class Method:
 
         self.w = 2* ( 1 - np.sqrt(1 - _xi))/_xi
         
-        print(self.w)
+        # print(self.w)
 
         div = 2*(1+ beta**2)
         S = self.__S()
-        print(np.max(np.abs(S))*self.hx**2)
+        # print(np.max(np.abs(S))*self.hx**2)
 
         p_zero_xl = self.bound_cond.p_x_left_cond(self.y,self.t)
         
-        print(p_zero_xl.shape)
+        # print(p_zero_xl.shape)
         p_zero_yl = self.bound_cond.p_y_left_cond(self.x, self.t)
-        print(p_zero_yl.shape)
+        # print(p_zero_yl.shape)
 
-        self.relax_steps = 10
+        
         for _ in range(self.relax_steps):
             new_p_xr = self.__grid_left_right(new_p, type_is='p', direction= 'r', cond_axis = 'x')
             new_p_yr = self.__grid_left_right(new_p, type_is='p', direction= 'r', cond_axis = 'y')
@@ -468,26 +428,247 @@ class Method:
                     p_i_minus = new_p[j,i]
     
         self.p = new_p
-        print('--------------')
+        # print('--------------')
     def update(self):
+        """
+        Обновление сетки (x,y), шаг по времени
+        """
         
-        print(self.u.shape, self.v.shape, self.p.shape)
-
-        # D = self.__D()
-        # print(D.shape)
+                
+        self._update_p()
         
-        self.__update_p()
-        print(self.p.shape)
 
         self._update_u()
-        print(self.u.shape)
+        
 
         self._update_v()
-        print(self.v.shape)
+        
       
 
         self.t += self.tau
         self.count +=1
+
+
+
+def main_and_error_plots(x_lim, y_lim, hx, hy, t_0, tau, steps, first_moment = 1, nsize = 1, cmap_name = 'viridis', **params):
+    """
+    Главная функция для создания отчета
+    принимает ограничения по x: x_lim, по y: y_lim
+    шаг по иксу: hx, шаг по игреку: hy
+    начальное время: t_0
+    шаг по времени: tau
+    Число шагов, что надо сделать: steps
+    число шагов для первой части рисунка: first_moment (советую брать малое число шагов, чтобы было видно скорости)
+    nsize регулирует размер графиков
+    cmap_name -- название тепловой карты. По ссылке можно выбрать другую
+    https://matplotlib.org/stable/tutorials/colors/colormaps.html
+    **params - это словарь константами для функций.
+    """
+    t = t_0
+
+    cond = BoundaryConditions_first_type(x_lim,y_lim,t_0,analytical_u,analytical_v,analytical_p,**params)
+
+    x= np.arange(*x_lim, step =hx)[1:]
+    y= np.arange(*y_lim, step =hy)[1:]
+    xv, yv = np.meshgrid(x,y)
+
+    m = Method(x,y,cond,hx,hy, tau, **params)
+
+    errors = [[],[],[]]
+
+    first_steps =  first_moment if first_moment < steps else 1
+    first_t = t_0
+
+    for step in range(steps):
+        print('step: ',step+1)
+        m.update()
+        t = t+ tau    
+
+        errors[0].append(absolute_error(analytical_u(xv,yv,t),m.Get_u()))
+        errors[1].append(absolute_error(analytical_v(xv,yv,t),m.Get_v()))
+        errors[2].append(absolute_error(analytical_p(xv,yv,t),m.Get_p()))
+
+        if step == first_steps:
+            first_u = m.Get_u()
+            first_v = m.Get_v()
+            first_p = m.Get_p()
+            first_t = t
+
+    # рисунок решений
+
+    my_scale = int(np.max(np.abs(analytical_u(xv,yv,t_0))) *10)
+
+    fig1 , axes1 = plt.subplots(nrows = 2, ncols = 2, figsize = (nsize*14,nsize*7))
+
+    axes1 = axes1.ravel()
+    for ax in axes1:
+        ax.set_ylabel('$y$')
+        ax.set_xlabel('$x$')
+    cmap = plt.get_cmap(cmap_name)
+    im = axes1[0].contourf(xv,yv,analytical_p(xv,yv,first_t),cmap= cmap)
+    axes1[0].quiver(xv,yv, analytical_u(xv,yv,first_t), analytical_v(xv,yv,first_t), scale_units = "xy", scale = my_scale, angles ="xy")
+    axes1[0].set_title(f'Analytical decision. $t = {round(first_t,2)}$')
+
+    im = axes1[1].contourf(xv,yv,first_p,cmap= cmap)
+    axes1[1].quiver(xv,yv, first_u,first_v,scale_units = "xy", scale = my_scale, angles ="xy")
+    axes1[1].set_title(f'Modeling decision. $t = {round(first_t,2)}$')    
+    plt.colorbar(im,ax=axes1[:2],cmap= cmap)
+
+   
+    im = axes1[2].contourf(xv,yv,analytical_p(xv,yv,t),cmap= cmap)
+    axes1[2].quiver(xv,yv, analytical_u(xv,yv,t), analytical_v(xv,yv,t), scale_units = "xy", scale = my_scale, angles ="xy")
+    axes1[2].set_title(f'Analytical decision. $t = {round(t,2)}$')
+
+    im= axes1[3].contourf(xv,yv,m.Get_p(),cmap= cmap)
+    axes1[3].quiver(xv,yv, m.Get_u(),m.Get_v(),scale_units = "xy", scale = my_scale, angles ="xy")
+    axes1[3].set_title(f'Modeling decision. $t = {round(t,2)}$')    
+    plt.colorbar(im,ax=axes1[2:],cmap= cmap)    
+        
+    # рисунок ошибок
+
+    fig2, axes2 = plt.subplots(ncols = 3, figsize = (nsize*16,nsize*5))
+
+    axes2 = axes2.ravel()
+    
+    titles = ['$u$ errors', '$v$ errors','$p$ errors']
+    for i in range(3):
+        axes2[i].plot(np.arange(steps), errors[i])
+        axes2[i].set_title(titles[i])
+        axes2[i].set_ylabel('absolute error')
+        axes2[i].set_xlabel('steps')
+
+    axes2[0].plot(np.arange(steps), errors[0])
+    axes2[1].plot(np.arange(steps), errors[1])
+    axes2[2].plot(np.arange(steps), errors[2])
+
+    plt.show()
+
+
+def plot_for_errors_in_lab():
+    """
+    Не нужна в общем случае
+    Рисует график, который демонстрирует, что лабораторная работа работает плохо
+    """
+    x_lim = [0,3.1]
+    y_lim = [0,1]
+
+
+    hx = 0.1
+    hy = 0.1
+
+    t_0 = 0
+    tau = 0.0001
+
+
+    params = {
+        "d" : y_lim[1],
+        "rho": 1,
+        "visc": 1
+    }
+
+
+    cond = BoundaryConditions_first_type(x_lim,y_lim,t_0,analytical_u,analytical_v,analytical_p,**params)
+
+    x= np.arange(*x_lim, step =hx)[1:]
+    y= np.arange(*y_lim, step =hy)[1:]
+    xv, yv = np.meshgrid(x,y)
+    
+    m = Method(x,y,cond,hx,hy, tau, **params)
+    m.update()
+    t = t_0+ tau
+
+    my_scale = int(np.max(np.abs(analytical_u(xv,yv,t_0))) *10)
+    fig1, axes = plt.subplots(ncols=2, figsize =(14, 5))
+    ax1, ax2 = axes.ravel()
+    cmap = plt.get_cmap('viridis')
+    im1 =ax1.contourf(xv,yv,analytical_p(xv,yv,t),cmap= cmap)
+    ax1.quiver(xv,yv, analytical_u(xv,yv,t), analytical_v(xv,yv,t), scale_units = "xy", scale = my_scale, angles ="xy")
+    fig1.colorbar(im1,cmap= cmap,ax= ax1)
+    ax1.set_title(f'Analytical decision. $t = {t}$')
+    ax1.set_ylabel('$y$')
+    ax1.set_xlabel('$x$')
+
+
+    im2 =ax2.contourf(xv,yv,m.Get_p(),cmap= cmap)
+    ax2.quiver(xv,yv, m.Get_u(),m.Get_v(),scale_units = "xy", scale = my_scale, angles ="xy")
+    fig1.colorbar(im2,ax= ax2, cmap = cmap)
+    ax2.set_title(f'Modeling decision. $t = {t}$')
+    ax2.set_ylabel('$y$')
+    ax2.set_xlabel('$x$')
+    plt.show()
+
+def anim_plots(x_lim, y_lim, hx, hy, t_0, tau, steps,name_analit = 'analit_anim.gif',name_model = 'model_anim.gif', decimal_places= 2, figsize = None,**params):
+    """
+    функция для создания анимации
+    создает 2 файла с анимацией аналитического решения и с анимацией модели.
+    принимает ограничения по x: x_lim, по y: y_lim
+    шаг по иксу: hx, шаг по игреку: hy
+    начальное время: t_0
+    шаг по времени: tau
+    Число шагов, что надо сделать: steps
+    name_analit, name_model -- названия для файлов анимации
+    figsize -- можно менять размер рисунка.
+    **params - это словарь константами для функций.
+    """
+    
+    t = [t_0]
+    count = [0]
+    cond = BoundaryConditions_first_type(x_lim,y_lim,t_0,analytical_u,analytical_v,analytical_p,**params)
+
+    x= np.arange(*x_lim, step =hx)[1:]
+    y= np.arange(*y_lim, step =hy)[1:]
+    xv, yv = np.meshgrid(x,y)
+
+    m = Method(x,y,cond,hx,hy, tau, **params)
+
+    fig = plt.figure(figsize=figsize)
+
+    ax = plt.axes(xlim = x_lim, ylim  =y_lim)
+    ax.set_ylabel('$y$')
+    ax.set_xlabel('$x$')
+    my_scale = int(np.max(np.abs(analytical_u(xv,yv,t_0))) *10)
+
+    qv = ax.quiver(xv,yv,analytical_u(xv,yv,t[0]),analytical_v(xv,yv,t[0]),scale_units = "xy", scale = my_scale, angles ="xy")
+
+    def init1():
+        qv.set_UVC(analytical_u(xv,yv,t[0]),analytical_v(xv,yv,t[0]))
+        ax.set_title(f'Analytical decision. steps: {count[0]}, time: {round(t[0], decimal_places)}')
+        return qv,
+    
+    def animate1(i):
+        t[0]+=tau
+        count[0] +=1
+        qv.set_UVC(analytical_u(xv,yv,t[0]),analytical_v(xv,yv,t[0]))
+        ax.set_title(f'Analytical decision. steps: {count[0]}, time: {round(t[0], decimal_places)}')
+        return qv,
+
+    anim1 = animation.FuncAnimation(fig, animate1, init_func=init1,
+                            frames=steps,interval=100, blit=True)
+    anim1.save(name_analit)
+
+    fig = plt.figure(figsize=figsize)
+    ax = plt.axes(xlim = x_lim, ylim  =y_lim)
+    ax.set_ylabel('$y$')
+    ax.set_xlabel('$x$')
+    my_scale = int(np.max(np.abs(analytical_u(xv,yv,t_0))) *10)
+
+    qv = ax.quiver(xv,yv,m.Get_u(),m.Get_v(),scale_units = "xy", scale = my_scale, angles ="xy")
+    def init2():
+        qv.set_UVC(m.Get_u(),m.Get_v())
+        ax.set_title(f'Modeling decision. steps: {m.count}, time: {round(m.t, decimal_places)}')
+        return qv,
+    
+    def animate2(i):
+        m.update()
+        qv.set_UVC(m.Get_u(),m.Get_v())
+        ax.set_title(f'Modeling decision. steps: {m.count}, time: {round(m.t, decimal_places)}')
+        return qv,
+
+    anim1 = animation.FuncAnimation(fig, animate2, init_func=init2,
+                            frames=steps,interval=100, blit=True)
+    anim1.save(name_model)
+
+
 
 if __name__ == "__main__":
     x_lim = [0,3.1]
@@ -507,59 +688,32 @@ if __name__ == "__main__":
         "visc": 1
     }
 
-    cond = BoundaryConditions_first_type(x_lim,y_lim,t_0,analytical_u,analytical_v,analytical_p,**params)
 
-    x= np.arange(*x_lim, step =hx)[1:]
-    y= np.arange(*y_lim, step =hy)[1:]
-    xv, yv = np.meshgrid(x,y)
+    # print('________________________')
+    # print('u')
+    # print('absolute_error ', absolute_error(analytical_u(xv,yv,t),m.Get_u()))
     
-    m = Method(x,y,cond,hx,hy, tau, **params)
-
-
-    print(absolute_error(analytical_u(xv,yv,t_0),m.Get_u()))
-    print(absolute_error(analytical_v(xv,yv,t_0),m.Get_v()))
-    print(absolute_error(analytical_p(xv,yv,t_0),m.Get_p()))
-
-    t = t_0
-    for i in range(1):
-        m.update()
-        t = t+ tau
-
-    print(m.Get_u())
-
-    print('________________________')
-    print('u')
-    print('absolute_error ', absolute_error(analytical_u(xv,yv,t),m.Get_u()))
-    
-    print('max value ',np.max(np.abs(analytical_u(xv,yv,t))))
+    # print('max value ',np.max(np.abs(analytical_u(xv,yv,t))))
     
 
-    print('________________________')
+    # print('________________________')
 
-    print('v')
-    print('absolute_error ',absolute_error(analytical_v(xv,yv,t),m.Get_v()))
-    print('max value ',np.max(np.abs(analytical_v(xv,yv,t))))
-
-
-    print('________________________')
-    print('p')
-    print('absolute_error ',absolute_error(analytical_p(xv,yv,t),m.Get_p()))
-    print('max value ',np.max(np.abs(analytical_p(xv,yv,t))))
+    # print('v')
+    # print('absolute_error ',absolute_error(analytical_v(xv,yv,t),m.Get_v()))
+    # print('max value ',np.max(np.abs(analytical_v(xv,yv,t))))
 
 
-    fig1, ax1 = plt.subplots()
-    im1 = ax1.quiver(xv,yv, analytical_u(xv,yv,t), analytical_v(xv,yv,t),analytical_p(xv,yv,t), scale_units = "xy", scale = 50, angles ="xy")
-    plt.colorbar(im1)
-    # ax1.quiver(xv,yv, 0.000001*analytical_u(xv,yv,t), np.zeros(xv.shape))
-    ax1.set_title('analytical')
+    # print('________________________')
+    # print('p')
+    # print('absolute_error ',absolute_error(analytical_p(xv,yv,t),m.Get_p()))
+    # print('max value ',np.max(np.abs(analytical_p(xv,yv,t))))
 
 
-    fig2, ax2 = plt.subplots()
-    im2 =ax2.quiver(xv,yv, m.Get_u(),m.Get_v(),m.Get_p(),scale_units = "xy", scale = 50, angles ="xy")
-    plt.colorbar(im2)
-    ax2.set_title('test')
+    steps =100
+    main_and_error_plots(x_lim,y_lim,hx,hy,t_0,tau,steps, **params)
     
-    plt.show()
+    
+    plot_for_errors_in_lab()
 
-    print(np.max(np.abs(analytical_p(xv,yv,0)))-np.min(np.abs(analytical_p(xv,yv,0))))
-    print(np.min(analytical_p(xv,yv,0)))
+    steps = 20
+    anim_plots(x_lim,y_lim,hx,hy,t_0,tau,steps, **params)
