@@ -498,7 +498,7 @@ def main_and_error_plots(x_lim, y_lim, hx, hy, t_0, tau, steps, first_moment = 1
 
     my_scale = int(np.max(np.abs(analytical_u(xv,yv,t_0))) *10)
 
-    fig1 , axes1 = plt.subplots(nrows = 2, ncols = 2, figsize = (nsize*14,nsize*7))
+    fig1 , axes1 = plt.subplots(nrows = 2, ncols = 2, figsize = (nsize*14,nsize*9))
 
     axes1 = axes1.ravel()
     for ax in axes1:
